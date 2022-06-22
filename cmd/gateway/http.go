@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/nautilus/gateway"
 	"github.com/nautilus/graphql"
@@ -26,38 +25,7 @@ func ListenAndServe(services []string) {
 	}
 
 	// add the graphql endpoints to the router
-	http.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && strings.Contains(r.Header.Get("Accept"), "text/html") { // rudimentary check to see if this is accessed from a browser UI
-			// if calling from a UI, redirect to the UI handler
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-			return
-		}
-		gw.GraphQLHandler(w, r)
-	})
-
-	playgroundHandler := gw.StaticPlaygroundHandler(gateway.PlaygroundConfig{
-		Endpoint: "/graphql",
-	})
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			// ensure our catch-all handler pattern "/" only runs on "/"
-			http.NotFound(w, r)
-			return
-		}
-
-		// set the necessary CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-
-		// if we are handling a pre-flight request
-		if r.Method == http.MethodOptions {
-			return
-		}
-
-		playgroundHandler.ServeHTTP(w, r)
-	})
+	http.HandleFunc("/graphql", setCORSHeaders(gw.PlaygroundHandler))
 
 	// start the server
 	fmt.Printf("🚀 Gateway is ready at http://localhost:%s/graphql\n", Port)
@@ -65,5 +33,23 @@ func ListenAndServe(services []string) {
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
+	}
+}
+
+func setCORSHeaders(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		// set the necessary CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PUT")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+
+		// if we are handling a pre-flight request
+		if req.Method == http.MethodOptions {
+			return
+		}
+
+		// invoke the handler
+		fn(w, req)
 	}
 }
